@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Popkhana's Stock In &amp; Out</title>
+
+<!-- Home screen app behaviour -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Popkhana Stock">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#E07A1F">
+
+<!-- App icon for home screen (orange P on cream background) -->
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%23FFF6DE'/%3E%3Ctext x='90' y='124' font-family='Arial, sans-serif' font-size='110' font-weight='800' text-anchor='middle' fill='%23E07A1F'%3EP%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='36' fill='%23FFF6DE'/%3E%3Ctext x='90' y='124' font-family='Arial, sans-serif' font-size='110' font-weight='800' text-anchor='middle' fill='%23E07A1F'%3EP%3C/text%3E%3C/svg%3E">
+
+<!-- Firebase (Realtime Database) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap');
+
+  :root{
+    --ink:#5C3A1E;
+    --ink-soft:#8C6A45;
+    --gold:#F2A93B;
+    --gold-deep:#E07A1F;
+    --cream:#FFF6DE;
+    --paper:#FFFBF0;
+    --rule:#F5DFA8;
+    --warn:#D9531C;
+    --ok:#C99000;
+    --shadow: 0 2px 0 rgba(92,58,30,0.06);
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Nunito',sans-serif;
+    background:var(--cream);
+    color:var(--ink);
+    padding:32px 16px 64px;
+    padding-top:max(32px, env(safe-area-inset-top));
+    padding-bottom:max(64px, env(safe-area-inset-bottom));
+    padding-left:max(16px, env(safe-area-inset-left));
+    padding-right:max(16px, env(safe-area-inset-right));
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+
+  .ledger-head{
+    display:flex;justify-content:space-between;align-items:flex-end;
+    border-bottom:3px solid var(--ink);padding-bottom:14px;margin-bottom:20px;
+    flex-wrap:wrap;gap:8px;
+  }
+  .ledger-head h1{
+    font-family:'Baloo 2',sans-serif;font-weight:700;font-size:clamp(26px,5vw,38px);
+    margin:0;letter-spacing:-0.01em;
+  }
+  .ledger-head .tag{font-size:13px;color:var(--ink-soft);font-family:'Baloo 2',sans-serif;letter-spacing:0.02em;text-transform:uppercase;font-size:11px;}
+  .datebox{font-size:13px;color:var(--ink-soft);text-align:right;line-height:1.5;}
+
+  .sync-note{
+    font-size:12px;color:var(--ink-soft);background:#FCEAC0;border-radius:10px;
+    padding:8px 12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .sync-note .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);display:inline-block;margin-right:6px;}
+  .sync-note .dot.saving{background:var(--gold-deep);}
+
+  /* Alert banner */
+  .alert-banner{
+    background:var(--warn);color:#fff;border-radius:12px;padding:16px 20px;
+    margin-bottom:20px;display:none;
+  }
+  .alert-banner.show{display:block;}
+  .alert-banner h3{
+    font-family:'Baloo 2',sans-serif;font-size:15px;margin:0 0 8px;display:flex;align-items:center;gap:8px;
+  }
+  .alert-row{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-size:13.5px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.2);
+  }
+  .alert-row:last-child{border-bottom:none;}
+  .alert-row b{font-weight:700;}
+  .alert-meta{font-size:11.5px;opacity:0.85;margin-top:8px;}
+
+  .panel{
+    background:var(--paper);border:1px solid var(--rule);border-radius:12px;
+    padding:24px;margin-bottom:20px;box-shadow:var(--shadow);
+  }
+  .panel h2{font-family:'Baloo 2',sans-serif;font-size:18px;margin:0 0 16px;display:flex;align-items:center;gap:8px;}
+  .eyebrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold-deep);font-weight:700;margin-bottom:4px;display:block;}
+
+  /* Stock table */
+  table.stock{width:100%;border-collapse:collapse;font-size:13.5px;}
+  table.stock th{
+    text-align:left;font-family:'Baloo 2',sans-serif;font-weight:600;font-size:12.5px;
+    padding:8px 8px;border-bottom:2px solid var(--ink);color:var(--ink-soft);
+  }
+  table.stock td{padding:8px 8px;border-bottom:1px solid var(--rule);vertical-align:middle;}
+  table.stock tr.low-row{background:rgba(217,83,28,0.08);}
+  table.stock input[type=number]{
+    width:72px;padding:6px 8px;border:1.5px solid var(--rule);border-radius:8px;
+    font-family:'Nunito',sans-serif;font-size:13.5px;font-weight:600;color:var(--ink);background:#fff;
+  }
+  table.stock input[type=number]:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold);}
+  td.flavour-cell{display:flex;align-items:center;gap:8px;font-weight:600;min-width:130px;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex-shrink:0;}
+  td.closing-val{font-family:'Baloo 2',sans-serif;font-weight:700;font-size:16px;}
+  td.closing-val.low{color:var(--warn);}
+  td.closing-val.ok{color:var(--ok);}
+  .runway{font-size:11px;color:var(--ink-soft);display:block;margin-top:2px;}
+  .runway.crit{color:var(--warn);font-weight:600;}
+
+  /* Account holder settings */
+  .row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;}
+  .field{flex:1;min-width:160px;}
+  label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-soft);margin-bottom:6px;}
+  .field .sub{font-size:11px;color:#9C8A72;font-weight:400;display:block;margin-top:2px;}
+  input[type=text], input[type=number], select{
+    padding:9px 11px;border:1.5px solid var(--rule);border-radius:9px;
+    font-family:'Nunito',sans-serif;font-size:14px;font-weight:600;color:var(--ink);background:#fff;width:100%;
+  }
+  input[type=text]:focus, input[type=number]:focus, select:focus{outline:2px solid var(--gold);outline-offset:1px;border-color:var(--gold);}
+
+  .move-tag{
+    font-size:11.5px;font-weight:700;padding:2px 9px;border-radius:10px;display:inline-block;
+  }
+  .move-tag.in{background:rgba(201,144,0,0.16);color:var(--ok);}
+  .move-tag.out{background:rgba(217,83,28,0.13);color:var(--warn);}
+  button.btn.ghost{
+    background:transparent;color:var(--warn);border:1.5px solid var(--warn);
+    padding:4px 10px;font-size:11.5px;border-radius:8px;cursor:pointer;
+  }
+  button.btn.ghost:hover{background:rgba(217,83,28,0.08);}
+
+  button.btn{
+    background:var(--ink);color:var(--cream);border:none;border-radius:9px;
+    padding:9px 16px;font-family:'Nunito',sans-serif;font-weight:600;font-size:13px;
+    cursor:pointer;transition:background .15s;
+  }
+  button.btn:hover{background:var(--gold-deep);}
+
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:6px;}
+  .empty{font-size:13.5px;color:var(--ink-soft);font-style:italic;padding:8px 0;}
+
+  .mail-row{
+    display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    margin-top:14px;padding-top:14px;border-top:1px dashed var(--rule);
+  }
+  .mail-btn{
+    background:var(--gold-deep);color:#fff;flex-shrink:0;
+  }
+  .mail-btn:hover{background:var(--warn);}
+  .mail-row .hint{margin-top:0;flex:1;min-width:200px;}
+
+  @media (max-width:700px){
+    table.stock{font-size:12px;}
+    table.stock th, table.stock td{padding:6px 5px;}
+    table.stock input[type=number]{width:56px;padding:5px 6px;}
+  }
+  @media (prefers-reduced-motion: reduce){*{transition:none !important;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="ledger-head">
+    <div>
+      <h1>Popkhana's Stock In &amp; Out</h1>
+      <div class="tag">shared stock tracker for staff</div>
+    </div>
+    <div class="datebox" id="todayDate"></div>
+  </div>
+
+  <div class="sync-note" id="syncNote">
+    <span><span class="dot" id="syncDot"></span><span id="syncText">All staff see the same stock data — changes save automatically.</span></span>
+  </div>
+
+  <!-- LOW STOCK ALERT -->
+  <div class="alert-banner" id="alertBanner">
+    <h3>⚠ Reorder needed within the week</h3>
+    <div id="alertRows"></div>
+    <div class="alert-meta" id="alertMeta"></div>
+  </div>
+
+  <!-- ACCOUNT HOLDER SETTINGS -->
+  <div class="panel">
+    <span class="eyebrow">Who gets notified</span>
+    <h2>Account Holder &amp; Reorder Settings</h2>
+    <div class="row">
+      <div class="field">
+        <label for="holderName">Account holder name<span class="sub">who staff should contact</span></label>
+        <input type="text" id="holderName" placeholder="e.g. Sirisha">
+      </div>
+      <div class="field">
+        <label for="holderContact">Contact email<span class="sub">used for the reminder email below</span></label>
+        <input type="text" id="holderContact" placeholder="e.g. sirisha@popkhana.co.uk">
+      </div>
+      <div class="field">
+        <label for="leadTime">Reorder lead time<span class="sub">days needed to get new stock in</span></label>
+        <input type="number" id="leadTime" min="1" value="7">
+      </div>
+    </div>
+    <p class="hint">Stock runway is estimated from the packs sold so far this week. When remaining stock is projected to run out within the lead time above, that flavour shows in the alert banner for the account holder to action.</p>
+    <div class="mail-row">
+      <button class="btn mail-btn" onclick="sendReminderEmail()">✉ Send reminder email</button>
+      <span class="hint" id="mailHint">Opens your email app with a pre-filled reminder to the contact above. Nothing sends until you hit send yourself.</span>
+    </div>
+  </div>
+
+  <!-- LOG ENTRY -->
+  <div class="panel">
+    <span class="eyebrow">Record a movement</span>
+    <h2>Add Stock In / Stock Out</h2>
+    <div class="row">
+      <div class="field">
+        <label for="logFlavour">Flavour</label>
+        <select id="logFlavour"></select>
+      </div>
+      <div class="field">
+        <label for="logType">Movement</label>
+        <select id="logType">
+          <option value="in">Stock in (received)</option>
+          <option value="out">Stock out (sold)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="logQty">Quantity (packs)</label>
+        <input type="number" id="logQty" min="1" value="10">
+      </div>
+      <div class="field">
+        <label for="logDate">Date</label>
+        <input type="date" id="logDate">
+      </div>
+      <div class="field" style="display:flex;align-items:flex-end;">
+        <button class="btn" onclick="addLogEntry()" style="width:100%;">Add entry</button>
+      </div>
+    </div>
+    <p class="hint">Each entry is dated and added to that flavour's history below. Closing stock updates automatically from the full log, not just this week.</p>
+  </div>
+
+  <!-- STOCK TABLE -->
+  <div class="panel">
+    <span class="eyebrow">Current totals</span>
+    <h2>Stock by Flavour</h2>
+    <table class="stock">
+      <thead>
+        <tr>
+          <th>Flavour</th>
+          <th>Total in</th>
+          <th>Total out</th>
+          <th>Closing stock</th>
+          <th>Reorder level<span style="display:block;font-weight:400;font-size:10.5px;">(alert below this)</span></th>
+        </tr>
+      </thead>
+      <tbody id="stockBody"></tbody>
+    </table>
+  </div>
+
+  <!-- LOG HISTORY -->
+  <div class="panel">
+    <span class="eyebrow">Full history, most recent first</span>
+    <h2>Stock In / Out Log</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <div class="field">
+        <label for="filterFlavour">Filter by flavour</label>
+        <select id="filterFlavour" onchange="renderLog()"></select>
+      </div>
+    </div>
+    <table class="stock" id="logTable">
+      <thead>
+        <tr><th>Date</th><th>Flavour</th><th>Movement</th><th>Quantity</th><th></th></tr>
+      </thead>
+      <tbody id="logBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  // ---- Firebase setup ----
+  const firebaseConfig = {
+    apiKey: "AIzaSyBurvuVgmKkdFroIofYUs1yPY0WUNxeIMQ",
+    authDomain: "popkhana-stock.firebaseapp.com",
+    databaseURL: "https://popkhana-stock-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "popkhana-stock",
+    storageBucket: "popkhana-stock.firebasestorage.app",
+    messagingSenderId: "56573148074",
+    appId: "1:56573148074:web:eb48ccd53c0601d0c209d3"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const flavours = [
+    { name:"South Indian", color:"#8C5A2B" },
+    { name:"Tomato", color:"#C1432A" },
+    { name:"Onion & Cream", color:"#D9B98C" },
+    { name:"Salt & Pepper", color:"#A89C8A" },
+    { name:"Mint", color:"#6F9A6E" },
+    { name:"Cheese", color:"#E0B23C" }
+  ];
+
+  let reorderLevels = {}; // flavourName -> level
+  flavours.forEach(f => reorderLevels[f.name] = 20);
+
+  let log = []; // { id, date, flavour, type:'in'|'out', qty }
+  let settings = { holderName:'', holderContact:'', leadTime: 7 };
+  let isApplyingRemoteUpdate = false;
+
+  document.getElementById('todayDate').innerHTML =
+    new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}) +
+    '<br>Stock ledger';
+
+  document.getElementById('logDate').value = new Date().toISOString().split('T')[0];
+
+  function populateFlavourSelects(){
+    const logSel = document.getElementById('logFlavour');
+    const filterSel = document.getElementById('filterFlavour');
+    logSel.innerHTML = flavours.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+    filterSel.innerHTML = `<option value="">All flavours</option>` + flavours.map(f => `<option value="${f.name}">${f.name}</option>`).join('');
+  }
+
+  function setSyncStatus(saving, label){
+    const dot = document.getElementById('syncDot');
+    const text = document.getElementById('syncText');
+    if (saving){
+      dot.classList.add('saving');
+      text.textContent = label || 'Saving…';
+    } else {
+      dot.classList.remove('saving');
+      text.textContent = 'All staff see the same stock data — synced live.';
+    }
+  }
+
+  // ---- Load once, then listen live for changes from any staff member ----
+  function loadData(){
+    setSyncStatus(true, 'Connecting…');
+
+    db.ref('stockData').once('value').then(snapshot=>{
+      const data = snapshot.val();
+      if (data){
+        if (data.log) log = data.log;
+        if (data.reorderLevels) reorderLevels = data.reorderLevels;
+      }
+      populateFlavourSelects();
+      renderAll();
+      setSyncStatus(false);
+    }).catch(e=>{
+      console.error('Initial load failed', e);
+      populateFlavourSelects();
+      renderAll();
+      setSyncStatus(false);
+    });
+
+    db.ref('stockSettings').once('value').then(snapshot=>{
+      const data = snapshot.val();
+      if (data){ settings = data; }
+      document.getElementById('holderName').value = settings.holderName || '';
+      document.getElementById('holderContact').value = settings.holderContact || '';
+      document.getElementById('leadTime').value = settings.leadTime || 7;
+      renderAll();
+    }).catch(e=> console.error('Settings load failed', e));
+
+    // Live updates from other staff members' devices
+    db.ref('stockData').on('value', snapshot=>{
+      const data = snapshot.val();
+      if (!data) return;
+      isApplyingRemoteUpdate = true;
+      if (data.log) log = data.log;
+      if (data.reorderLevels) reorderLevels = data.reorderLevels;
+      renderAll();
+      isApplyingRemoteUpdate = false;
+    });
+
+    db.ref('stockSettings').on('value', snapshot=>{
+      const data = snapshot.val();
+      if (!data) return;
+      isApplyingRemoteUpdate = true;
+      settings = data;
+      document.getElementById('holderName').value = settings.holderName || '';
+      document.getElementById('holderContact').value = settings.holderContact || '';
+      document.getElementById('leadTime').value = settings.leadTime || 7;
+      renderAll();
+      isApplyingRemoteUpdate = false;
+    });
+  }
+
+  let saveTimer = null;
+  function scheduleSave(){
+    if (isApplyingRemoteUpdate) return; // don't re-save data that just arrived from another device
+    setSyncStatus(true, 'Saving…');
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>{
+      Promise.all([
+        db.ref('stockData').set({ log, reorderLevels }),
+        db.ref('stockSettings').set(settings)
+      ]).then(()=>{
+        setSyncStatus(false);
+      }).catch(e=>{
+        console.error('Save failed', e);
+        setSyncStatus(false);
+      });
+    }, 400);
+  }
+
+  function computeTotals(flavourName){
+    const entries = log.filter(e => e.flavour === flavourName);
+    const totalIn = entries.filter(e=>e.type==='in').reduce((s,e)=>s+e.qty,0);
+    const totalOut = entries.filter(e=>e.type==='out').reduce((s,e)=>s+e.qty,0);
+    return { totalIn, totalOut, closing: totalIn - totalOut };
+  }
+
+  function recentDailyRate(flavourName, days){
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const recentOut = log.filter(e => e.flavour===flavourName && e.type==='out' && new Date(e.date) >= cutoff)
+                          .reduce((s,e)=>s+e.qty,0);
+    return recentOut / days;
+  }
+
+  function renderAll(){
+    renderStock();
+    renderLog();
+  }
+
+  function renderStock(){
+    const tbody = document.getElementById('stockBody');
+    tbody.innerHTML = flavours.map(f=>{
+      const { totalIn, totalOut, closing } = computeTotals(f.name);
+      const level = reorderLevels[f.name] || 0;
+      const isLow = closing <= level;
+      const dailyRate = recentDailyRate(f.name, 7);
+      const leadTime = parseInt(document.getElementById('leadTime').value) || 7;
+      let runwayHtml = '';
+      if (dailyRate > 0){
+        const daysLeft = closing / dailyRate;
+        const isCrit = daysLeft <= leadTime;
+        runwayHtml = `<span class="runway ${isCrit?'crit':''}">${daysLeft.toFixed(1)}d left at recent pace</span>`;
+      }
+      return `
+        <tr class="${isLow ? 'low-row' : ''}">
+          <td class="flavour-cell"><span class="dot" style="background:${f.color}"></span>${f.name}</td>
+          <td>${totalIn}</td>
+          <td>${totalOut}</td>
+          <td class="closing-val ${isLow?'low':'ok'}">${closing}${runwayHtml}</td>
+          <td><input type="number" min="0" value="${level}" onchange="updateReorderLevel('${f.name}',this.value)"></td>
+        </tr>
+      `;
+    }).join('');
+    renderAlert();
+  }
+
+  function renderAlert(){
+    const leadTime = parseInt(document.getElementById('leadTime').value) || 7;
+    const lowItems = flavours.map(f=>{
+      const { closing } = computeTotals(f.name);
+      const level = reorderLevels[f.name] || 0;
+      const dailyRate = recentDailyRate(f.name, 7);
+      const daysLeft = dailyRate > 0 ? closing / dailyRate : (closing <= level ? 0 : Infinity);
+      return { name: f.name, closing, level, daysLeft };
+    }).filter(s => s.closing <= s.level || s.daysLeft <= leadTime);
+
+    const banner = document.getElementById('alertBanner');
+    if (lowItems.length === 0){
+      banner.classList.remove('show');
+      return;
+    }
+    banner.classList.add('show');
+    document.getElementById('alertRows').innerHTML = lowItems.map(s => `
+      <div class="alert-row">
+        <span><b>${s.name}</b> — ${s.closing} packs left${isFinite(s.daysLeft) ? ` (≈${s.daysLeft.toFixed(1)} days at recent sales pace)` : ''}</span>
+        <span>Reorder level: ${s.level}</span>
+      </div>
+    `).join('');
+
+    const holderName = settings.holderName || 'the account holder';
+    const holderContact = settings.holderContact;
+    document.getElementById('alertMeta').textContent =
+      `Notify ${holderName}${holderContact ? ' (' + holderContact + ')' : ''} to reorder — lead time is set to ${leadTime} day${leadTime===1?'':'s'}.`;
+  }
+
+  function renderLog(){
+    const filter = document.getElementById('filterFlavour').value;
+    const tbody = document.getElementById('logBody');
+    const entries = log
+      .filter(e => !filter || e.flavour === filter)
+      .slice()
+      .sort((a,b)=> new Date(b.date) - new Date(a.date) || b.id - a.id);
+
+    if (entries.length === 0){
+      tbody.innerHTML = `<tr><td colspan="5"><span class="empty">No entries yet — add a stock movement above.</span></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = entries.map(e=>{
+      const dateLabel = new Date(e.date).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+      return `
+        <tr>
+          <td>${dateLabel}</td>
+          <td>${e.flavour}</td>
+          <td><span class="move-tag ${e.type}">${e.type==='in'?'+ IN':'− OUT'}</span></td>
+          <td>${e.qty} packs</td>
+          <td><button class="btn ghost" onclick="deleteLogEntry(${e.id})">Remove</button></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  function addLogEntry(){
+    const flavour = document.getElementById('logFlavour').value;
+    const type = document.getElementById('logType').value;
+    const qty = parseFloat(document.getElementById('logQty').value) || 0;
+    const date = document.getElementById('logDate').value || new Date().toISOString().split('T')[0];
+    if (qty <= 0) return;
+
+    log.push({ id: Date.now(), date, flavour, type, qty });
+    document.getElementById('logQty').value = 10;
+    renderAll();
+    scheduleSave();
+  }
+
+  function deleteLogEntry(id){
+    log = log.filter(e => e.id !== id);
+    renderAll();
+    scheduleSave();
+  }
+
+  function updateReorderLevel(flavourName, value){
+    reorderLevels[flavourName] = parseFloat(value) || 0;
+    renderStock();
+    scheduleSave();
+  }
+
+  ['holderName','holderContact','leadTime'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', ()=>{
+      settings.holderName = document.getElementById('holderName').value;
+      settings.holderContact = document.getElementById('holderContact').value;
+      settings.leadTime = parseInt(document.getElementById('leadTime').value) || 7;
+      renderStock();
+      scheduleSave();
+    });
+  });
+
+  function sendReminderEmail(){
+    const leadTime = parseInt(document.getElementById('leadTime').value) || 7;
+    const lowItems = flavours.map(f=>{
+      const { closing } = computeTotals(f.name);
+      const level = reorderLevels[f.name] || 0;
+      const dailyRate = recentDailyRate(f.name, 7);
+      const daysLeft = dailyRate > 0 ? closing / dailyRate : (closing <= level ? 0 : Infinity);
+      return { name: f.name, closing, level, daysLeft };
+    }).filter(s => s.closing <= s.level || s.daysLeft <= leadTime);
+
+    const holderName = settings.holderName || 'there';
+    const holderContact = (settings.holderContact || '').trim();
+
+    if (lowItems.length === 0){
+      alert('No flavours are currently low on stock — nothing to send yet.');
+      return;
+    }
+
+    const subject = `Popkhana stock reminder — ${lowItems.length} flavour${lowItems.length===1?'':'s'} need reordering`;
+    const lines = lowItems.map(s =>
+      `- ${s.name}: ${s.closing} packs left${isFinite(s.daysLeft) ? ` (~${s.daysLeft.toFixed(1)} days at recent sales pace)` : ''}, reorder level is ${s.level}`
+    );
+    const body =
+`Hi ${holderName},
+
+This is a reminder from the Popkhana Stock Ledger that the following flavours are at or below their reorder level, with a lead time of ${leadTime} day${leadTime===1?'':'s'}:
+
+${lines.join('\n')}
+
+Please arrange reordering soon to avoid running out.
+
+— Sent from the Popkhana Stock Ledger`;
+
+    const mailto = `mailto:${encodeURIComponent(holderContact)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.location.href = mailto;
+  }
+
+  loadData();
+</script>
+</body>
+</html>
